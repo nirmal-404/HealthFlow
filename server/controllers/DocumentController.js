@@ -1,7 +1,59 @@
 const Document = require("../models/DocumentModel");
+const User = require("../models/User");
+const Patient = require("../models/Patient");
 const cloudinary = require("../middleware/CloudinaryConfig");
 const upload = require("../middleware/MulterConfig");
 const fs = require('fs');
+
+/**
+ * Helper function to verify if the authenticated user has permission
+ * to view, modify, or delete a specific document.
+ */
+const canUserAccessDocument = async (reqUser, document) => {
+  if (!reqUser) return false;
+
+  const roleName = reqUser.activeRole?.name;
+  const userIdStr = reqUser.id?.toString();
+
+  // Admins and Staff have full administrative access
+  if (roleName === "sys_admin" || roleName === "sys_staff") {
+    return true;
+  }
+
+  // Assigned Doctor can access
+  const docDoctorId = document.doctorid?._id
+    ? document.doctorid._id.toString()
+    : document.doctorid?.toString();
+  if (docDoctorId && docDoctorId === userIdStr) {
+    return true;
+  }
+
+  // Patient matching direct ID can access
+  const docPatientId = document.patientid?._id
+    ? document.patientid._id.toString()
+    : document.patientid?.toString();
+  if (docPatientId && docPatientId === userIdStr) {
+    return true;
+  }
+
+  // Check if user is linked to patient record via NIC or email
+  if (docPatientId) {
+    const userObj = await User.findById(userIdStr);
+    if (userObj) {
+      const patientObj = await Patient.findById(docPatientId);
+      if (patientObj) {
+        if (
+          (userObj.nic && patientObj.nic && userObj.nic === patientObj.nic) ||
+          (userObj.email && patientObj.email && userObj.email === patientObj.email)
+        ) {
+          return true;
+        }
+      }
+    }
+  }
+
+  return false;
+};
 
 const insertDocument = async (req, res) => {
   upload.single("document")(req, res, async (err) => {
@@ -94,6 +146,12 @@ const updateDocument = async (req, res) => {
         return res.status(404).json({ message: "Document not found for the given id" });
       }
 
+      // IDOR Authorization check
+      const isAuthorized = await canUserAccessDocument(req.user, document);
+      if (!isAuthorized) {
+        return res.status(403).json({ message: "Forbidden: You are not authorized to update this document" });
+      }
+
       // Only update fields that are provided
       if (req.body.documentName) {
         document.documentName = req.body.documentName;
@@ -162,6 +220,12 @@ const getDocumentById = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
+    // IDOR Authorization check
+    const isAuthorized = await canUserAccessDocument(req.user, document);
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Forbidden: You are not authorized to view this document" });
+    }
+
     res.status(200).json({ document });
   } catch (error) {
     console.error(error);
@@ -176,21 +240,40 @@ const getAllDocuments = async (req, res) => {
     const { patientId, doctorId } = req.query;
     let query = {};
 
-    console.log("get all doc, :",patientId, doctorId);
+    const roleName = req.user?.activeRole?.name;
 
-    if (patientId) {
-      query.patientid = patientId;  // Keep as patientid to match the database field
-    }
-    if (doctorId) {
-      query.doctorid = doctorId;  // Keep as doctorid to match the database field
+    if (roleName === "sys_patient") {
+      // If user is a patient, strictly restrict to their patient records/user ID
+      const userObj = await User.findById(req.user.id);
+      let patientRecordIds = [req.user.id];
+      if (userObj) {
+        const patientMatch = await Patient.find({
+          $or: [
+            { _id: req.user.id },
+            ...(userObj.nic ? [{ nic: userObj.nic }] : []),
+            ...(userObj.email ? [{ email: userObj.email }] : [])
+          ]
+        });
+        patientRecordIds.push(...patientMatch.map(p => p._id));
+      }
+      query.patientid = { $in: patientRecordIds };
+    } else if (roleName === "sys_doctor") {
+      // If user is a doctor, default to their doctor ID unless staff/admin
+      query.doctorid = req.user.id;
+    } else {
+      // Admin / Staff can query by provided filters
+      if (patientId) {
+        query.patientid = patientId;
+      }
+      if (doctorId) {
+        query.doctorid = doctorId;
+      }
     }
 
     const documents = await Document.find(query)
       .populate('patientid', 'name')
       .populate('doctorid', 'name')
       .sort({ createdAt: -1 });
-
-      console.log("Documents found:", documents);
 
     res.status(200).json({ documents });
   } catch (error) {
@@ -201,11 +284,19 @@ const getAllDocuments = async (req, res) => {
 
 const deleteDocument = async (req, res) => {
   try {
-    const document = await Document.findByIdAndDelete(req.params.id);
+    const document = await Document.findById(req.params.id);
 
     if (!document) {
       return res.status(404).json({ message: "Document not found" });
     }
+
+    // IDOR Authorization check
+    const isAuthorized = await canUserAccessDocument(req.user, document);
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Forbidden: You are not authorized to delete this document" });
+    }
+
+    await Document.findByIdAndDelete(req.params.id);
 
     res.status(200).json({
       message: "Document deleted successfully",
@@ -220,12 +311,20 @@ const deleteDocument = async (req, res) => {
 
 const statusUpdate = async (req, res) => {
   try {
+    const targetId = req.params.id || req.params.patentid;
     const { doctorid, status } = req.body;
 
-    const document = await Document.findById(req.params.id);
+    const document = await Document.findById(targetId);
 
     if (!document) {
       return res.status(404).json({ message: "Document not found" });
+    }
+
+    // Authorization check - only doctors, admin, or staff can update status
+    const isAuthorized = await canUserAccessDocument(req.user, document);
+    const roleName = req.user?.activeRole?.name;
+    if (!isAuthorized || roleName === "sys_patient") {
+      return res.status(403).json({ message: "Forbidden: Only doctors or staff can update document status" });
     }
 
     const validStatuses = ["Pending", "Doctor Review", "Approved", "Rejected"];
@@ -233,7 +332,7 @@ const statusUpdate = async (req, res) => {
       return res.status(400).json({ message: "Invalid status provided" });
     }
 
-    document.doctorid = doctorid;
+    document.doctorid = doctorid || document.doctorid;
     document.status = status;
     document.modifiedAt = new Date();
 
@@ -259,6 +358,12 @@ const downloadDocument = async (req, res) => {
       return res.status(404).json({ message: "Document not found" });
     }
 
+    // IDOR Authorization check
+    const isAuthorized = await canUserAccessDocument(req.user, document);
+    if (!isAuthorized) {
+      return res.status(403).json({ message: "Forbidden: You are not authorized to download this document" });
+    }
+
     // Check if the document URL exists
     if (!document.documentUrl) {
       return res.status(404).json({ message: "Document URL not found" });
@@ -282,12 +387,9 @@ const downloadDocument = async (req, res) => {
     // Format filename for download
     const filename = `${document.documentName}${fileExtension ? '.' + fileExtension : ''}`;
 
-    // For Cloudinary URLs, ensure we're getting a download URL
-
     let url = document.documentUrl;
     if (url.includes('cloudinary.com')) {
       url = url.replace('/upload/', '/upload/fl_attachment/');
-
     }
 
     res.status(200).json({
@@ -306,22 +408,24 @@ const downloadDocument = async (req, res) => {
 
 const getAllDocumentsByDoctor = async (req, res) => {
   try {
-    // Use doctorId from query params if provided, otherwise use authenticated user's ID
-    const doctorId = req.query.doctorId || req.user?.id;
+    const roleName = req.user?.activeRole?.name;
+    let doctorId = req.query.doctorId;
 
-    console.log("Doctor ID:", doctorId);
+    if (roleName === "sys_doctor") {
+      doctorId = req.user.id;
+    } else if (!doctorId && (roleName === "sys_admin" || roleName === "sys_staff")) {
+      doctorId = req.user.id;
+    }
     
     if (!doctorId) {
       return res.status(400).json({ message: "Doctor ID is required" });
     }
 
-    // Find all documents where the specified doctor is assigned
     const documents = await Document.find({ doctorid: doctorId })
       .populate('patientid', 'name')
       .populate('doctorid', 'name')
       .sort({ createdAt: -1 });
 
-    console.log(`Found ${documents.length} documents for doctor ${doctorId}`);
     res.status(200).json({ documents });
   } catch (error) {
     console.error("Error in getAllDocumentsByDoctor:", error);
@@ -335,30 +439,30 @@ const getAllDocumentsByDoctor = async (req, res) => {
 const getDocumentPreview = async (req, res) => {
   try {
     const { id } = req.params;
-    console.log('Fetching document preview for ID:', id);
     
-    // Find the document
     const document = await Document.findById(id);
     if (!document) {
       return res.status(404).json({ message: 'Document not found' });
     }
 
-    // Get the document URL
+    // IDOR Authorization check
+    const isAuthorized = await canUserAccessDocument(req.user, document);
+    if (!isAuthorized) {
+      return res.status(403).json({ message: 'Forbidden: You are not authorized to preview this document' });
+    }
+
     const documentUrl = document.documentUrl;
     if (!documentUrl) {
       return res.status(404).json({ message: 'Document URL not found' });
     }
 
-    // For Cloudinary URLs, modify based on file type
     let previewUrl = documentUrl;
     if (documentUrl.includes('cloudinary.com')) {
       const fileExtension = document.documentName.split('.').pop().toLowerCase();
       
       if (fileExtension === 'pdf') {
-        // For PDFs, use raw format to prevent download
         previewUrl = documentUrl.replace('/upload/', '/upload/fl_attachment:false,fl_raw:true/');
       } else {
-        // For images and other files, use the existing preview format
         previewUrl = documentUrl.replace('/upload/', '/upload/fl_attachment:false,fl_force_strip:true/');
       }
     }

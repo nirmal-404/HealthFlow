@@ -14,6 +14,9 @@ const { verifyToken, protect } = require("../middleware/authMiddleware");
 
 const router = express.Router();
 
+// Enforce authentication on all document routes
+router.use(protect);
+
 router.post("/", insertDocument);
 // Move specific routes before wildcard routes
 router.get("/doctor/documents", getAllDocumentsByDoctor);

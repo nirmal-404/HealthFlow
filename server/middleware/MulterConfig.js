@@ -7,10 +7,9 @@ const storage = multer.diskStorage({
     cb(null, path.join(__dirname, "../uploads")); // Temporary storage
   },
   filename: function (req, file, cb) {
-    // Get file extension
-    const ext = path.extname(file.originalname).toLowerCase();
-    // Create filename with timestamp to avoid duplicates
-    cb(null, `${Date.now()}-${file.originalname}`);
+    // Sanitize original filename to prevent path traversal attack (e.g., ../../evil.pdf)
+    const sanitizedOriginalName = path.basename(file.originalname).replace(/[^a-zA-Z0-9_.-]/g, "_");
+    cb(null, `${Date.now()}-${sanitizedOriginalName}`);
   }
 });
 
