@@ -403,15 +403,38 @@ const updateSchedule = async (req, res) => {
 };
 
 //get appointment by id
-
 const getAppointmentById = async (req, res) => {
   try {
-    const appointmentId = req.params.appointmentId; // Changed from req.params.id to req.params.appointmentId
+    const appointmentId = req.params.appointmentId;
     console.log("Received appointment ID:", appointmentId);
     const appointment = await Appointment.findById(appointmentId);
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found." });
+    }
+
+    // IDOR Protection: Ensure requesting user is authorized to access appointment & Agora token
+    const requestingUserId = req.user.id.toString();
+    const roleName = req.user.activeRole?.name;
+
+    const isDoctor = appointment.doctorId && appointment.doctorId.toString() === requestingUserId;
+    const isPatient = appointment.patientId && appointment.patientId.toString() === requestingUserId;
+    const isAdmin = roleName === "sys_admin";
+
+    let isMatchingPatientEmailOrNic = false;
+    if (!isPatient && roleName === "sys_patient") {
+      const user = await User.findById(req.user.id);
+      if (user) {
+        isMatchingPatientEmailOrNic =
+          (user.email && appointment.email && user.email.toLowerCase() === appointment.email.toLowerCase()) ||
+          (user.nic && appointment.nic && user.nic === appointment.nic);
+      }
+    }
+
+    if (!isDoctor && !isPatient && !isMatchingPatientEmailOrNic && !isAdmin) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to view this appointment or access its video consultation room.",
+      });
     }
 
     res.status(200).json(appointment);
@@ -425,6 +448,13 @@ const getAppointmentById = async (req, res) => {
 const getAppointmentsByDoctor = async (req, res) => {
   try {
     const doctorId = req.params.doctorId;
+    const requestingUserId = req.user.id.toString();
+    const roleName = req.user.activeRole?.name;
+
+    // Access control: Doctor can only access their own list unless Admin
+    if (roleName === "sys_doctor" && doctorId !== requestingUserId) {
+      return res.status(403).json({ message: "Forbidden: You can only view your own doctor appointments." });
+    }
 
     // Get all appointments for the doctor
     const appointments = await Appointment.find({ doctorId });
@@ -469,6 +499,12 @@ const getAppointmentsByDoctor = async (req, res) => {
 const getActiveAppointments = async (req, res) => {
   try {
     const { doctorId } = req.params;
+    const requestingUserId = req.user.id.toString();
+    const roleName = req.user.activeRole?.name;
+
+    if (roleName === "sys_doctor" && doctorId !== requestingUserId) {
+      return res.status(403).json({ message: "Forbidden: You can only view your own active appointments." });
+    }
 
     const appointments = await Appointment.find({
       doctorId,
@@ -490,6 +526,13 @@ const getActiveAppointments = async (req, res) => {
 const getAppointmentsByPatient = async (req, res) => {
   try {
     const patientId = req.params.patientId;
+    const requestingUserId = req.user.id.toString();
+    const roleName = req.user.activeRole?.name;
+
+    if (roleName === "sys_patient" && patientId !== requestingUserId) {
+      return res.status(403).json({ message: "Forbidden: You can only view your own patient appointments." });
+    }
+
     const appointments = await Appointment.find({ patientId });
 
     if (!appointments.length) {
@@ -516,6 +559,18 @@ const deleteAppointment = async (req, res) => {
 
     if (!appointment) {
       return res.status(404).json({ message: "Appointment not found." });
+    }
+
+    // IDOR Access Control Check
+    const requestingUserId = req.user.id.toString();
+    const roleName = req.user.activeRole?.name;
+
+    const isDoctor = appointment.doctorId && appointment.doctorId.toString() === requestingUserId;
+    const isPatient = appointment.patientId && appointment.patientId.toString() === requestingUserId;
+    const isAdmin = roleName === "sys_admin";
+
+    if (!isDoctor && !isPatient && !isAdmin) {
+      return res.status(403).json({ message: "Forbidden: You are not authorized to cancel this appointment." });
     }
 
     // Check if appointment was booked within last 12 hours

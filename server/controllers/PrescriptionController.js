@@ -42,12 +42,29 @@ const getAllPrescriptions = async (req, res) => {
 const getPrescriptionById = async (req, res) => {
   try {
     const { id } = req.params;
+    const requestingUser = req.user;
+    const roleName = requestingUser?.activeRole?.name;
+
     const prescriptionDetails = await prescription
       .findById(id)
-      .populate("doctorId");
+      .populate("doctorId")
+      .populate("patientId");
+
     if (!prescriptionDetails) {
       return res.status(404).json({ message: "Prescription not found" });
     }
+
+    const requestingUserId = requestingUser.id.toString();
+    const isDoctor = prescriptionDetails.doctorId && prescriptionDetails.doctorId._id.toString() === requestingUserId;
+    const isPatient = prescriptionDetails.patientId && prescriptionDetails.patientId._id.toString() === requestingUserId;
+    const isAdmin = roleName === "sys_admin";
+
+    if (!isDoctor && !isPatient && !isAdmin) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to view this prescription.",
+      });
+    }
+
     res.status(200).json(prescriptionDetails);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -57,15 +74,28 @@ const getPrescriptionById = async (req, res) => {
 //CreatePrescription
 const CreatePrescription = async (req, res) => {
   try {
-    const { patientId, doctorId, medicines, validUntil, notes } = req.body;
+    const requestingUser = req.user;
+    const roleName = requestingUser?.activeRole?.name;
+    const { patientId, doctorId: bodyDoctorId, medicines, validUntil, notes } = req.body;
+
+    // Strict Authorization Check: Only sys_doctor or users with doctor role can create prescriptions
+    if (roleName !== "sys_doctor" && roleName !== "sys_admin") {
+      return res.status(403).json({
+        message: "Forbidden: Only licensed doctors are authorized to create prescriptions.",
+      });
+    }
+
+    // Automatically enforce logged-in doctor's ID as prescribing doctor
+    const doctorId = requestingUser.id.toString();
 
     console.log("patient id in the backend", patientId);
-    console.log("doctor id in the backend", doctorId);
+    console.log("prescribing doctor id in the backend", doctorId);
+
     const patient = await user.findById(patientId);
     const doctor = await user.findById(doctorId);
-    console.log(doctor);
-    if (!patientId || !doctorId) {
-      return res.status(404).json({ message: "Patient or Doctor not found" });
+
+    if (!patient || !doctor) {
+      return res.status(404).json({ message: "Patient or Doctor record not found" });
     }
 
     const newPrescription = new prescription({
@@ -79,6 +109,7 @@ const CreatePrescription = async (req, res) => {
     await newPrescription.save();
     res.status(201).json("Prescription Created Successfully");
   } catch (error) {
+    console.error("[PrescriptionController] Create error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -87,33 +118,35 @@ const CreatePrescription = async (req, res) => {
 const UpdatePrescription = async (req, res) => {
   try {
     const { id } = req.params;
-    const { patientId, doctorId, medicines, validUntil, notes } = req.body;
+    const requestingUser = req.user;
+    const roleName = requestingUser?.activeRole?.name;
 
-    const patient = await user.findById(patientId);
-    const doctor = await user.findById(doctorId);
-
-    if (!patientId || !doctorId) {
-      return res.status(404).json({ message: "Patient or Doctor not found" });
-    }
-
-    const updatedPrescription = await prescription.findByIdAndUpdate(
-      id,
-      {
-        patientId,
-        doctorId,
-        medicines,
-        validUntil,
-        notes,
-      },
-      { new: true }
-    );
-
-    if (!updatedPrescription) {
+    const existingPrescription = await prescription.findById(id);
+    if (!existingPrescription) {
       return res.status(404).json({ message: "Prescription not found" });
     }
 
+    const isCreatorDoctor = existingPrescription.doctorId.toString() === requestingUser.id.toString();
+    const isAdmin = roleName === "sys_admin";
+
+    if (!isCreatorDoctor && !isAdmin) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to update this prescription.",
+      });
+    }
+
+    const { patientId, medicines, validUntil, notes } = req.body;
+
+    existingPrescription.medicines = medicines || existingPrescription.medicines;
+    existingPrescription.validUntil = validUntil || existingPrescription.validUntil;
+    existingPrescription.notes = notes !== undefined ? notes : existingPrescription.notes;
+    if (patientId) existingPrescription.patientId = patientId;
+
+    await existingPrescription.save();
+
     res.status(200).json("Prescription Updated Successfully");
   } catch (error) {
+    console.error("[PrescriptionController] Update error:", error);
     res.status(500).json({ message: error.message });
   }
 };
@@ -122,12 +155,27 @@ const UpdatePrescription = async (req, res) => {
 const DeletePrescription = async (req, res) => {
   try {
     const { id } = req.params;
-    const deletedPrescription = await prescription.findByIdAndDelete(id);
-    if (!deletedPrescription) {
+    const requestingUser = req.user;
+    const roleName = requestingUser?.activeRole?.name;
+
+    const existingPrescription = await prescription.findById(id);
+    if (!existingPrescription) {
       return res.status(404).json({ message: "Prescription not found" });
     }
+
+    const isCreatorDoctor = existingPrescription.doctorId.toString() === requestingUser.id.toString();
+    const isAdmin = roleName === "sys_admin";
+
+    if (!isCreatorDoctor && !isAdmin) {
+      return res.status(403).json({
+        message: "Forbidden: You are not authorized to delete this prescription.",
+      });
+    }
+
+    await prescription.findByIdAndDelete(id);
     res.status(200).json({ message: "Prescription deleted successfully" });
   } catch (error) {
+    console.error("[PrescriptionController] Delete error:", error);
     res.status(500).json({ message: error.message });
   }
 };

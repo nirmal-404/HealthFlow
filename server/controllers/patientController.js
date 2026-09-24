@@ -1,13 +1,36 @@
 const Patient = require('../models/Patient');
+const User = require('../models/User');
 
 exports.getPatientByNIC = async (req, res) => {
   try {
-    const patient = await Patient.findOne({ nic: req.params.nic });
+    const requestedNic = req.params.nic;
+    const requestingUser = req.user;
+
+    const patient = await Patient.findOne({ nic: requestedNic });
     if (!patient) {
       return res.status(404).json({ message: 'Patient not found' });
     }
+
+    const roleName = requestingUser?.activeRole?.name;
+    const userId = requestingUser?.id?.toString();
+
+    // If requesting user is a patient, enforce strict ownership
+    if (roleName === 'sys_patient') {
+      const user = await User.findById(requestingUser.id);
+      const isOwner =
+        (user?.nic && user.nic === requestedNic) ||
+        (user?.email && patient.email && user.email.toLowerCase() === patient.email.toLowerCase());
+
+      if (!isOwner) {
+        return res.status(403).json({
+          message: 'Access Denied: You are not authorized to view another patient\'s details.',
+        });
+      }
+    }
+
     res.json(patient);
   } catch (error) {
+    console.error('[patientController] Error in getPatientByNIC:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
