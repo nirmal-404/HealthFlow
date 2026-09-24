@@ -1,7 +1,14 @@
-# HealthFlow_ITP_CWMS
-A clinical workflow management system SaaS software for local doctors.
+# 🏥 HealthFlow Clinical Workflow Management System
+> **A Clinical Workflow & Healthcare Management System for Local Doctors**
 
+---
 
+### 🔗 Original Repository
+[![GitHub Repository](https://img.shields.io/badge/Original_Repository-chamika--11%2FHealth__Flow__Management__System-181717?style=for-the-badge&logo=github&logoColor=white)](https://github.com/chamika-11/Health_Flow_Management_System)
+
+⭐ **Original Project URL**: [https://github.com/chamika-11/Health_Flow_Management_System](https://github.com/chamika-11/Health_Flow_Management_System)
+
+---
 🩺 Full-Stack Healthcare Management Platform
 A comprehensive web-based platform enabling CRUD operations for patient records, appointments, prescriptions, feedback, and medical documents.
 
