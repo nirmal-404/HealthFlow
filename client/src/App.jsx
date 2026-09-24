@@ -42,6 +42,7 @@ import PastEncounters from "./pages/past-encounters";
 import AppointmentSuccessPage from "./pages/appointment-success";
 import AppointmentCancelPage from "./pages/appointment-cancel";
 import ResetPassword from "./pages/reset-password-page";
+import OAuthCallbackPage from "./pages/OAuthCallbackPage";
 import AdminDashboard from "./pages/admin-dashboard";
 import UserManagementPage from "./pages/user-management-page";
 import UserDetailPage from "./pages/user-detail-page";
@@ -66,6 +67,9 @@ function App() {
 
         {/* Redirect from root to login */}
         <Route path="/" element={<Navigate to="/login" />} />
+
+        {/* OAuth 2.0 Passport Callback Route */}
+        <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
         
         <Route
             path="/register"

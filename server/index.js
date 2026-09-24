@@ -22,6 +22,7 @@ const patientRoutes = require("./routes/patientRoutes");
 const financialRoutes = require("./routes/financialRoutes"); // Import financial routes
 const paymentRoutes = require("./routes/paymentRoutes"); // Import payment routes
 const userRoutes = require("./routes/userRoutes"); // Import admin routes
+const passport = require("./config/passport");
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -48,6 +49,8 @@ app.use(
 
 // Middleware
 app.use(express.json());
+app.use(passport.initialize());
+
 
 // Log all incoming requests
 app.use((req, res, next) => {

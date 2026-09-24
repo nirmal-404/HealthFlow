@@ -1,5 +1,6 @@
 const express = require("express");
 const router = express.Router();
+const passport = require("passport");
 const { protect } = require("../middleware/authMiddleware");
 const {
   registerPatient,
@@ -14,8 +15,39 @@ const {
   forgotPassword,
   resetPassword,
   verifyResetToken,
-  logout, // Add the logout function
+  logout,
+  googleLogin,
+  connectGoogleAccount,
+  disconnectGoogleAccount,
+  getOAuthStatus,
+  passportGoogleCallback,
+  passportGoogleDemoCallback,
 } = require("../controllers/authController");
+
+// Passport.js Google OAuth 2.0 Routes
+router.get(
+  "/google",
+  passport.authenticate("google", { scope: ["profile", "email"], session: false })
+);
+
+router.get(
+  "/google/callback",
+  passport.authenticate("google", {
+    failureRedirect: "http://localhost:3000/login?error=OAuthFailed",
+    session: false,
+  }),
+  passportGoogleCallback
+);
+
+// Passport.js Demo Callback Route (for instant testing without Google Cloud Console credentials)
+router.get("/google/demo-callback", passportGoogleDemoCallback);
+
+// POST Google OAuth API endpoints
+router.post("/google", googleLogin);
+router.post("/google/connect", protect, connectGoogleAccount);
+router.post("/google/disconnect", protect, disconnectGoogleAccount);
+router.get("/oauth-status", protect, getOAuthStatus);
+
 
 // Log route accesses
 router.post(

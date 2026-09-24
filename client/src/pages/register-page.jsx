@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import PatientRegistration from "../components/registration/PatientRegistration";
 import DoctorRegistration from "../components/registration/DoctorRegistration";
 import StaffRegistration from "../components/registration/StaffRegistration";
+import GoogleAuthButton from "../components/auth/GoogleAuthButton";
 import "./RegisterPage.css";
 
 const RegisterPage = () => {
@@ -174,7 +175,22 @@ const RegisterPage = () => {
                   </div>
                 )}
 
-                <div className="text-center mt-8">
+                <div className="relative my-6">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-300"></div>
+                  </div>
+                  <div className="relative flex justify-center text-sm">
+                    <span className="px-2 bg-white text-gray-500">OR REGISTER WITH</span>
+                  </div>
+                </div>
+
+                <GoogleAuthButton
+                  mode="register"
+                  roleName={selectedMedicalRole === "doctor" ? "sys_doctor" : "sys_patient"}
+                  className="mb-4"
+                />
+
+                <div className="text-center mt-6">
                   <p className="text-gray-500 text-sm">
                     Already have an account?
                     <button

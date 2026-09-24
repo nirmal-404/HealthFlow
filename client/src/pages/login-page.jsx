@@ -3,6 +3,7 @@ import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { useAuthContext } from "../context/AuthContext";
 import AuthService from "../services/AuthService";
 import ForgotPassword from "../components/auth/ForgotPassword";
+import GoogleAuthButton from "../components/auth/GoogleAuthButton";
 
 const LoginPage = () => {
   const [identifier, setIdentifier] = useState("");
@@ -316,6 +317,8 @@ const LoginPage = () => {
                     <span className="px-2 bg-white text-gray-500">OR</span>
                   </div>
                 </div>
+
+                <GoogleAuthButton mode="login" className="mt-4" />
 
                 <p className="text-center text-gray-500 text-sm mt-6">
                   Don't have an account?

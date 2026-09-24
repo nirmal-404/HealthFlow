@@ -919,3 +919,233 @@ exports.logout = async (req, res) => {
     });
   }
 };
+
+// Passport.js Google OAuth 2.0 Success Callback Handler
+exports.passportGoogleCallback = async (req, res) => {
+  try {
+    const user = req.user;
+    if (!user) {
+      return res.redirect("http://localhost:3000/login?error=AuthenticationFailed");
+    }
+
+    // Get active role details
+    const { activeRole } = await getRolesAndActiveRole(user);
+    if (!activeRole || !activeRole.role.permissions) {
+      return res.redirect("http://localhost:3000/login?error=NoRoleAssigned");
+    }
+
+    // Generate JWT access token
+    const accessToken = generateAccessToken(user._id, activeRole.role._id);
+
+    // Set permissions in cache
+    await setPermissionsInCache(activeRole.role._id, activeRole.role.permissions);
+
+    console.log("[AuthController] Passport Google OAuth login success, redirecting user:", user._id);
+
+    // Redirect user back to frontend callback route with token
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    return res.redirect(`${frontendUrl}/oauth/callback?token=${accessToken}`);
+  } catch (error) {
+    console.error("[AuthController] Passport Google Callback Error:", error);
+    return res.redirect("http://localhost:3000/login?error=InternalServerError");
+  }
+};
+
+// Passport.js Google OAuth Demo Callback Handler (for testing without live credentials)
+exports.passportGoogleDemoCallback = async (req, res) => {
+  const { email = "demo.patient@gmail.com", name = "Demo Patient" } = req.query;
+
+  try {
+    console.log("[AuthController] Demo Passport Google Callback invoked for:", email);
+
+    let user = await User.findOne({ email: email.toLowerCase() });
+
+    if (user) {
+      user.authType = "google";
+      user.lastLoginAt = new Date();
+      user.loginCount = (user.loginCount || 0) + 1;
+      await user.save();
+    } else {
+      let patientRole = await Role.findOne({ name: "sys_patient" }) || await Role.findOne({ name: "patient" });
+      if (!patientRole) {
+        console.log("[AuthController] sys_patient role not found, creating automatically...");
+        patientRole = new Role({
+          name: "sys_patient",
+          permissions: [
+            { entity: "user", action: "view", scope: "own" },
+            { entity: "user", action: "delete", scope: "own" },
+            { entity: "user", action: "update", scope: "own" },
+            { entity: "record", action: "view", scope: "own" },
+            { entity: "record", action: "view", scope: "linked" },
+            { entity: "encounter", action: "view", scope: "linked" },
+            { entity: "prescription", action: "view", scope: "linked" },
+            { entity: "appointment", action: "create", scope: "own" },
+            { entity: "appointment", action: "view", scope: "own" },
+            { entity: "document", action: "upload", scope: "own" },
+            { entity: "document", action: "view", scope: "own" },
+            { entity: "feedback", action: "create", scope: "own" },
+            { entity: "feedback", action: "view", scope: "own" },
+          ],
+          isSystem: true,
+        });
+        await patientRole.save();
+      }
+
+      user = new User({
+        name: name,
+        email: email.toLowerCase(),
+        mobile: "N/A (Google OAuth)",
+        authType: "google",
+        oauthProviderId: `google_demo_${Date.now()}`,
+        roles: [{ role: patientRole._id }],
+        lastActiveRole: patientRole._id,
+        status: "active",
+        otpEnabled: false,
+        lastLoginAt: new Date(),
+        loginCount: 1,
+      });
+      await user.save();
+    }
+
+    const { activeRole } = await getRolesAndActiveRole(user);
+    const accessToken = generateAccessToken(user._id, activeRole.role._id);
+    await setPermissionsInCache(activeRole.role._id, activeRole.role.permissions);
+
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+    return res.redirect(`${frontendUrl}/oauth/callback?token=${accessToken}`);
+  } catch (error) {
+    console.error("[AuthController] Demo Callback Error:", error);
+    return res.redirect("http://localhost:3000/login?error=DemoLoginFailed");
+  }
+};
+
+// Google OAuth 2.0 direct login / connect API endpoints
+exports.googleLogin = async (req, res) => {
+  const { idToken, roleName = "sys_patient" } = req.body;
+  if (!idToken) return res.status(400).json({ message: "Google ID token is required." });
+  try {
+    const googleUser = await verifyGoogleToken(idToken);
+    const { googleId, email, name, picture } = googleUser;
+    let user = await User.findOne({
+      $or: [{ oauthProviderId: googleId }, { email: email.toLowerCase() }],
+    });
+    let targetRole;
+    if (user) {
+      if (user.status === "suspended" || user.status === "inactive") {
+        return res.status(403).json({ message: `Your account is ${user.status}.` });
+      }
+      if (!user.oauthProviderId) user.oauthProviderId = googleId;
+      user.authType = "google";
+      user.lastLoginAt = new Date();
+      user.loginCount = (user.loginCount || 0) + 1;
+      await user.save();
+    } else {
+      targetRole = await Role.findOne({ name: roleName }) || await Role.findOne({ name: "sys_patient" }) || await Role.findOne({ name: "patient" });
+      if (!targetRole) {
+        targetRole = new Role({
+          name: "sys_patient",
+          permissions: [
+            { entity: "user", action: "view", scope: "own" },
+            { entity: "user", action: "delete", scope: "own" },
+            { entity: "user", action: "update", scope: "own" },
+            { entity: "record", action: "view", scope: "own" },
+            { entity: "record", action: "view", scope: "linked" },
+            { entity: "encounter", action: "view", scope: "linked" },
+            { entity: "prescription", action: "view", scope: "linked" },
+            { entity: "appointment", action: "create", scope: "own" },
+            { entity: "appointment", action: "view", scope: "own" },
+            { entity: "document", action: "upload", scope: "own" },
+            { entity: "document", action: "view", scope: "own" },
+            { entity: "feedback", action: "create", scope: "own" },
+            { entity: "feedback", action: "view", scope: "own" },
+          ],
+          isSystem: true,
+        });
+        await targetRole.save();
+      }
+      user = new User({
+        name: name || email.split("@")[0],
+        email: email.toLowerCase(),
+        mobile: "N/A (Google Account)",
+        authType: "google",
+        oauthProviderId: googleId,
+        roles: [{ role: targetRole._id }],
+        lastActiveRole: targetRole._id,
+        status: "active",
+        otpEnabled: false,
+        lastLoginAt: new Date(),
+        loginCount: 1,
+      });
+      await user.save();
+    }
+    const { activeRole } = await getRolesAndActiveRole(user);
+    const accessToken = generateAccessToken(user._id, activeRole.role._id);
+    await setPermissionsInCache(activeRole.role._id, activeRole.role.permissions);
+    return res.status(200).json({
+      accessToken,
+      user: { id: user._id, name: user.name, email: user.email, authType: user.authType, oauthProviderId: user.oauthProviderId },
+      activeRole: { id: activeRole.role._id, name: activeRole.role.name, permissions: activeRole.role.permissions },
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Google OAuth failed.", errorDetails: error.message });
+  }
+};
+
+exports.connectGoogleAccount = async (req, res) => {
+  const userId = req.user.id;
+  const { idToken } = req.body;
+  if (!idToken) return res.status(400).json({ message: "Google ID Token is required." });
+  try {
+    const googleUser = await verifyGoogleToken(idToken);
+    const { googleId, email } = googleUser;
+    const existingUser = await User.findOne({
+      _id: { $ne: userId },
+      $or: [{ oauthProviderId: googleId }, { email: email.toLowerCase() }],
+    });
+    if (existingUser) {
+      return res.status(400).json({ message: "This Google account is already linked to another HealthFlow user." });
+    }
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    user.oauthProviderId = googleId;
+    user.authType = "google";
+    await user.save();
+    return res.status(200).json({ message: "Google account successfully connected!", user });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to connect Google account.", errorDetails: error.message });
+  }
+};
+
+exports.disconnectGoogleAccount = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ message: "User not found." });
+    if (user.authType === "google" && !user.password) {
+      return res.status(400).json({ message: "Cannot disconnect Google account without setting a traditional password first." });
+    }
+    user.oauthProviderId = undefined;
+    user.authType = "traditional";
+    await user.save();
+    return res.status(200).json({ message: "Google account successfully disconnected.", authType: "traditional" });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to disconnect Google account.", errorDetails: error.message });
+  }
+};
+
+exports.getOAuthStatus = async (req, res) => {
+  const userId = req.user.id;
+  try {
+    const user = await User.findById(userId).select("authType oauthProviderId email");
+    if (!user) return res.status(404).json({ message: "User not found." });
+    return res.status(200).json({
+      authType: user.authType,
+      isConnected: !!user.oauthProviderId,
+      hasPassword: !!user.password,
+      oauthProviderId: user.oauthProviderId,
+    });
+  } catch (error) {
+    return res.status(500).json({ message: "Failed to fetch OAuth status." });
+  }
+};
+
