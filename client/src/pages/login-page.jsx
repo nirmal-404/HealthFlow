@@ -69,10 +69,8 @@ const LoginPage = () => {
         setVerifiedCredentials(true);
         setUserId(result.userId); // Store userId for OTP verification
         
-        // Store in localStorage for auth context to access
+        // Store userId in localStorage for OTP verification step
         localStorage.setItem("temp_userId", result.userId);
-        localStorage.setItem("temp_identifier", identifier);
-        localStorage.setItem("temp_password", password);
         
         setError("A verification code has been sent to your email. Please check and enter it here.");
       } else if (result?.accessToken) {
@@ -139,8 +137,6 @@ const LoginPage = () => {
     
     // Clear temporary storage
     localStorage.removeItem("temp_userId");
-    localStorage.removeItem("temp_identifier");
-    localStorage.removeItem("temp_password");
   };
 
   const handleShowForgotPassword = () => {

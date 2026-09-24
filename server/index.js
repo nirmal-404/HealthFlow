@@ -23,6 +23,7 @@ const financialRoutes = require("./routes/financialRoutes"); // Import financial
 const paymentRoutes = require("./routes/paymentRoutes"); // Import payment routes
 const userRoutes = require("./routes/userRoutes"); // Import admin routes
 const passport = require("./config/passport");
+const helmet = require("helmet");
 
 const app = express();
 const PORT = process.env.PORT || 5002;
@@ -32,6 +33,13 @@ dotenv.config();
 
 // DB Connection
 connectDB();
+
+// Security Headers
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  })
+);
 
 // CORS Configuration - Allow PayHere notifications
 app.use(
@@ -52,11 +60,42 @@ app.use(express.json());
 app.use(passport.initialize());
 
 
-// Log all incoming requests
+// Utility to sanitize sensitive body parameters for logging
+const sanitizeForLogging = (obj) => {
+  if (!obj || typeof obj !== "object") return obj;
+  if (Array.isArray(obj)) return obj.map(sanitizeForLogging);
+
+  const sensitiveKeys = [
+    "password",
+    "confirmpassword",
+    "token",
+    "accesstoken",
+    "refreshtoken",
+    "otp",
+    "secret",
+    "creditcard",
+    "cvv",
+    "authorization",
+  ];
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (sensitiveKeys.includes(key.toLowerCase())) {
+      sanitized[key] = "[REDACTED]";
+    } else if (typeof value === "object" && value !== null) {
+      sanitized[key] = sanitizeForLogging(value);
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+};
+
+// Log all incoming requests safely
 app.use((req, res, next) => {
   console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
-  if (req.body) {
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
+  if (req.body && Object.keys(req.body).length > 0) {
+    console.log("Request body:", JSON.stringify(sanitizeForLogging(req.body), null, 2));
   }
   next();
 });

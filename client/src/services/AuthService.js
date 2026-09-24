@@ -107,8 +107,6 @@ const AuthService = {
 
     // Clear any temporary authentication data
     localStorage.removeItem("temp_userId");
-    localStorage.removeItem("temp_identifier");
-    localStorage.removeItem("temp_password");
 
     return true;
   },
