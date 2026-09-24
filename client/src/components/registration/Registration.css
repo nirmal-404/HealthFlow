@@ -1,0 +1,85 @@
+.registration {
+    width: 100%;
+  }
+  
+  .registration__title {
+    font-size: 24px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 24px;
+  }
+  
+  .registration__form {
+    width: 100%;
+  }
+  
+  .registration__section {
+    margin-bottom: 32px;
+  }
+  
+  .registration__section-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: #4b5563;
+    margin-bottom: 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #f3f4f6;
+  }
+  
+  .registration__grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+  
+  @media (min-width: 768px) {
+    .registration__grid {
+      grid-template-columns: 1fr 1fr;
+    }
+  }
+  
+  .registration__field {
+    margin-bottom: 16px;
+  }
+  
+  .registration__label {
+    display: block;
+    font-size: 14px;
+    color: #4b5563;
+    margin-bottom: 4px;
+  }
+  
+  .registration__input--error {
+    border-color: #ef4444 !important;
+  }
+  
+  .registration__error-text {
+    font-size: 12px;
+    color: #ef4444;
+    margin-top: 4px;
+  }
+  
+  .registration__error {
+    background-color: #fee2e2;
+    color: #b91c1c;
+    padding: 12px;
+    border-radius: 6px;
+    margin-bottom: 16px;
+  }
+  
+  .registration__actions {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+  }
+  
+  .registration__submit-btn {
+    width: 100%;
+  }
+  
+  .registration__link-btn {
+    align-self: center;
+  }
+  
+  

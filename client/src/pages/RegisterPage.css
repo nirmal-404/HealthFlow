@@ -1,0 +1,116 @@
+.register-page {
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 24px 16px;
+  }
+  
+  .register-page__header {
+    margin-bottom: 24px;
+  }
+  
+  .register-page__title {
+    font-size: 28px;
+    font-weight: 600;
+    color: #374151;
+    margin: 0;
+  }
+  
+  .register-page__card {
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    background-color: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  }
+  
+  .register-page__content {
+    padding: 24px;
+  }
+  
+  .register-page__section {
+    margin-bottom: 32px;
+    border-bottom: 1px solid #f3f4f6;
+    padding-bottom: 24px;
+  }
+  
+  .register-page__section:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+  }
+  
+  .register-page__section-title {
+    font-size: 18px;
+    font-weight: 500;
+    color: #374151;
+    margin-bottom: 16px;
+  }
+  
+  .register-page__radio-group {
+    margin-bottom: 16px;
+  }
+  
+  .register-page__question {
+    font-size: 16px;
+    color: #4b5563;
+    margin-bottom: 16px;
+  }
+  
+  .register-page__radio-label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 12px;
+    cursor: pointer;
+  }
+  
+  .register-page__radio-button {
+    position: relative;
+    width: 20px;
+    height: 20px;
+    margin-right: 12px;
+  }
+  
+  .register-page__radio-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+  }
+  
+  .register-page__radio-custom {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 20px;
+    height: 20px;
+    background-color: #fff;
+    border: 2px solid #d1d5db;
+    border-radius: 50%;
+    transition: all 0.2s;
+  }
+  
+  .register-page__radio-input:checked + .register-page__radio-custom {
+    border-color: #4f46e5;
+    background-color: #fff;
+  }
+  
+  .register-page__radio-input:checked + .register-page__radio-custom::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background-color: #4f46e5;
+  }
+  
+  .register-page__radio-text {
+    font-size: 16px;
+    color: #374151;
+  }
+  
+  .register-page__form-container {
+    margin-top: 24px;
+  }
+  
+  
